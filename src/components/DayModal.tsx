@@ -1,223 +1,328 @@
 import React, { useState, useEffect } from 'react';
 import type { DayDefinition, DayProgress } from '../types';
 import { ConfidenceSlider } from './ConfidenceSlider';
-import { X, AlertTriangle } from 'lucide-react';
+import {
+  X, CheckCircle2, Clock, BookOpen, ShieldAlert,
+  AlertTriangle, CheckSquare, Square, Award,
+  Terminal, Copy, Check, Sparkles
+} from 'lucide-react';
+import { triggerCelebration, playAudioBeep } from '../utils/confetti';
 
 interface DayModalProps {
-  def: DayDefinition;
-  progress: DayProgress;
+  day: DayDefinition | null;
+  progress?: DayProgress;
+  isOpen: boolean;
   onClose: () => void;
-  onSave: (p: DayProgress) => void;
+  onSave: (dayNumber: number, progress: Partial<DayProgress>) => void;
 }
 
-const CHECKLIST_LABELS = [
-  { key: 'learnedConcept' as const, label: 'Learned the concept' },
-  { key: 'completedPractical' as const, label: 'Completed the practical task' },
-  { key: 'canReproduce' as const, label: 'Can reproduce it without copying' },
-  { key: 'canExplain' as const, label: 'Can explain what I did' },
-  { key: 'wroteNotes' as const, label: 'Wrote notes' },
+const CHECKLIST_LABELS: { key: keyof DayProgress['checklist']; label: string }[] = [
+  { key: 'learnedConcept', label: 'Understood core concept & architecture thoroughly' },
+  { key: 'completedPractical', label: 'Executed hands-on practical mission in lab' },
+  { key: 'canReproduce', label: 'Can independently reproduce steps without guidance' },
+  { key: 'canExplain', label: 'Can explain the attack/defense mechanism in interview format' },
+  { key: 'wroteNotes', label: 'Logged detailed findings, cheatsheet commands & key takeaways' },
 ];
 
-export const DayModal: React.FC<DayModalProps> = ({ def, progress, onClose, onSave }) => {
-  const [local, setLocal] = useState<DayProgress>({ ...progress });
-  const [attemptedComplete, setAttemptedComplete] = useState(false);
+export const DayModal: React.FC<DayModalProps> = ({ day, progress, isOpen, onClose, onSave }) => {
+  if (!isOpen || !day) return null;
 
-  // Prevent body scroll when modal is open
+  const [hours, setHours] = useState(progress?.hours || 0);
+  const [labs, setLabs] = useState(progress?.labs || 0);
+  const [confidence, setConfidence] = useState(progress?.confidence || 5);
+  const [notes, setNotes] = useState(progress?.notes || '');
+  const [checklist, setChecklist] = useState<DayProgress['checklist']>(
+    progress?.checklist || {
+      learnedConcept: false,
+      completedPractical: false,
+      canReproduce: false,
+      canExplain: false,
+      wroteNotes: false,
+    }
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
   useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = ''; };
-  }, []);
+    if (day && progress) {
+      setHours(progress.hours || 0);
+      setLabs(progress.labs || 0);
+      setConfidence(progress.confidence || 5);
+      setNotes(progress.notes || '');
+      setChecklist(
+        progress.checklist || {
+          learnedConcept: false,
+          completedPractical: false,
+          canReproduce: false,
+          canExplain: false,
+          wroteNotes: false,
+        }
+      );
+      setError(null);
+    }
+  }, [day, progress]);
 
-  const allChecked = Object.values(local.checklist).every(Boolean);
-  const hasHours = local.hours > 0;
-  const canComplete = allChecked && hasHours;
-
-  const handleCheckbox = (key: keyof DayProgress['checklist']) => {
-    setLocal((p) => ({ ...p, checklist: { ...p.checklist, [key]: !p.checklist[key] } }));
+  const toggleChecklist = (key: keyof DayProgress['checklist']) => {
+    setChecklist((prev) => ({ ...prev, [key]: !prev[key] }));
+    playAudioBeep(580, 'sine', 0.08);
   };
 
   const handleComplete = () => {
-    if (!canComplete) { setAttemptedComplete(true); return; }
-    const updated: DayProgress = {
-      ...local,
+    const allChecked = Object.values(checklist).every(Boolean);
+    if (!allChecked) {
+      setError('You must complete all 5 daily checklist requirements before marking complete.');
+      playAudioBeep(220, 'sawtooth', 0.2);
+      return;
+    }
+    if (hours <= 0) {
+      setError('Please log study hours (> 0h) spent on this mission.');
+      playAudioBeep(220, 'sawtooth', 0.2);
+      return;
+    }
+
+    onSave(day.day, {
       completed: true,
-      completedAt: new Date().toISOString(),
-    };
-    onSave(updated);
+      hours,
+      labs,
+      confidence,
+      notes,
+      checklist,
+    });
+
+    triggerCelebration();
+    playAudioBeep(523.25, 'triangle', 0.15);
+    setTimeout(() => playAudioBeep(659.25, 'triangle', 0.15), 100);
+    setTimeout(() => playAudioBeep(783.99, 'triangle', 0.3), 200);
+
     onClose();
   };
 
   const handleSaveDraft = () => {
-    onSave(local);
+    onSave(day.day, {
+      completed: false,
+      hours,
+      labs,
+      confidence,
+      notes,
+      checklist,
+    });
+    playAudioBeep(440, 'sine', 0.1);
     onClose();
   };
 
   const handleMarkIncomplete = () => {
-    const updated: DayProgress = { ...local, completed: false, completedAt: undefined };
-    onSave(updated);
+    onSave(day.day, {
+      completed: false,
+    });
     onClose();
   };
 
-  const missingItems: string[] = [];
-  if (!hasHours) missingItems.push('Enter hours studied (> 0)');
-  CHECKLIST_LABELS.forEach(({ key, label }) => {
-    if (!local.checklist[key]) missingItems.push(label);
-  });
+  const copyBriefing = () => {
+    const text = `DAY ${day.day}: ${day.topic}\nTheory: ${day.study}\nPractical: ${day.practical}`;
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const checkedCount = Object.values(checklist).filter(Boolean).length;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div className="bg-gray-950 border border-gray-800 rounded-t-2xl sm:rounded-xl w-full sm:max-w-2xl max-h-[92vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="glass-panel-glow w-full max-w-2xl rounded-2xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl border border-slate-700/80">
         {/* Header */}
-        <div className="sticky top-0 bg-gray-950 border-b border-gray-800 px-5 py-4 flex items-center justify-between">
+        <div className="p-5 border-b border-slate-800/80 flex items-start justify-between bg-slate-900/60">
           <div>
-            <div className="text-xs font-mono text-green-400 uppercase tracking-widest">WEEK {def.week} — {def.weekName}</div>
-            <h2 className="text-white font-bold text-lg">DAY {def.day}</h2>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="font-mono text-xs font-bold text-emerald-400 uppercase tracking-widest px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-500/30">
+                DAY {day.day} • WEEK {day.week}
+              </span>
+              {progress?.completed && (
+                <span className="font-mono text-xs text-emerald-400 flex items-center gap-1">
+                  <CheckCircle2 size={13} /> Completed
+                </span>
+              )}
+            </div>
+            <h3 className="text-lg md:text-xl font-bold text-white tracking-tight">{day.topic}</h3>
           </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors">
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={copyBriefing}
+              className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700/60 transition-colors"
+              title="Copy briefing"
+            >
+              {copied ? <Check size={16} className="text-emerald-400" /> : <Copy size={16} />}
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700/60 transition-colors"
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
 
-        <div className="p-5 flex flex-col gap-5">
-          {/* Study */}
-          <div>
-            <div className="text-xs font-mono text-gray-500 uppercase tracking-wider mb-1">Study</div>
-            <div className="text-white font-semibold text-sm mb-2">{def.topic}</div>
-            <p className="text-gray-400 text-sm leading-relaxed">{def.study}</p>
-          </div>
-
-          {/* Practical Mission */}
-          <div className="bg-orange-500/5 border border-orange-500/20 rounded-lg p-4">
-            <div className="text-xs font-mono text-orange-400 uppercase tracking-wider mb-2">⚡ Practical Mission</div>
-            <p className="text-gray-300 text-sm leading-relaxed">{def.practical}</p>
-            {def.isCheckpoint && (
-              <div className="mt-3 pt-3 border-t border-orange-500/20">
-                <div className="text-xs font-mono text-orange-300">{def.checkpointText}</div>
+        {/* Modal Body */}
+        <div className="p-5 overflow-y-auto space-y-6 text-sm">
+          {/* Theory and Practical Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800/80 space-y-2">
+              <div className="flex items-center gap-2 font-mono text-xs text-emerald-400 font-bold uppercase tracking-wider">
+                <BookOpen size={14} />
+                <span>Theory & Architecture</span>
               </div>
-            )}
-            <p className="text-xs text-gray-600 font-mono mt-3">
-              ⚠ Practice only on systems you own or have explicit authorization to test.
-            </p>
+              <p className="text-xs text-slate-300 font-mono leading-relaxed">{day.study}</p>
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800/80 space-y-2">
+              <div className="flex items-center gap-2 font-mono text-xs text-cyan-400 font-bold uppercase tracking-wider">
+                <ShieldAlert size={14} />
+                <span>Practical Lab Mission</span>
+              </div>
+              <p className="text-xs text-slate-300 font-mono leading-relaxed">{day.practical}</p>
+            </div>
           </div>
 
-          {/* Completion Checklist */}
-          <div>
-            <div className="text-xs font-mono text-gray-500 uppercase tracking-wider mb-2">Completion Requirements</div>
-            <div className="flex flex-col gap-2">
+          {day.isCheckpoint && day.checkpointText && (
+            <div className="p-4 rounded-xl bg-amber-950/20 border border-amber-500/30 text-xs font-mono space-y-1">
+              <div className="text-amber-400 font-bold flex items-center gap-1.5">
+                <Award size={14} />
+                <span>MILESTONE TEST / CHECKPOINT</span>
+              </div>
+              <p className="text-slate-300">{day.checkpointText}</p>
+            </div>
+          )}
+
+          {/* 5-Step Verification Checklist */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="font-mono text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                <CheckSquare size={14} className="text-emerald-400" />
+                <span>Completion Checklist (Required)</span>
+              </label>
+              <span className="font-mono text-[11px] text-slate-400">
+                {checkedCount}/5 Checked
+              </span>
+            </div>
+
+            <div className="space-y-2">
               {CHECKLIST_LABELS.map(({ key, label }) => (
-                <label key={key} className="flex items-center gap-3 cursor-pointer group">
-                  <input
-                    type="checkbox"
-                    checked={local.checklist[key]}
-                    onChange={() => handleCheckbox(key)}
-                    className="w-4 h-4 accent-green-500 cursor-pointer"
-                  />
-                  <span className={`text-sm font-mono transition-colors ${local.checklist[key] ? 'text-green-400' : 'text-gray-400 group-hover:text-gray-200'}`}>
-                    {label}
-                  </span>
-                </label>
+                <div
+                  key={key}
+                  onClick={() => toggleChecklist(key)}
+                  className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                    checklist[key]
+                      ? 'bg-emerald-950/20 border-emerald-500/40 text-emerald-200'
+                      : 'bg-slate-900/40 border-slate-800 hover:border-slate-700 text-slate-400'
+                  }`}
+                >
+                  <button className="mt-0.5 text-emerald-400">
+                    {checklist[key] ? <CheckSquare size={16} /> : <Square size={16} className="text-slate-600" />}
+                  </button>
+                  <span className="text-xs font-mono select-none leading-relaxed">{label}</span>
+                </div>
               ))}
             </div>
           </div>
 
-          {/* Daily Record */}
-          <div>
-            <div className="text-xs font-mono text-gray-500 uppercase tracking-wider mb-3">Daily Record</div>
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <div>
-                <label className="text-xs font-mono text-gray-500 mb-1 block">Hours Studied</label>
+          {/* Time & Confidence inputs */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+            <div className="space-y-2">
+              <label className="font-mono text-xs font-medium text-slate-300 flex items-center gap-1.5">
+                <Clock size={14} className="text-emerald-400" />
+                <span>Hours Studied (Target: 5h)</span>
+              </label>
+              <div className="flex items-center gap-2">
                 <input
                   type="number"
-                  min={0}
-                  max={24}
-                  step={0.5}
-                  value={local.hours || ''}
-                  onChange={(e) => setLocal((p) => ({ ...p, hours: Math.max(0, parseFloat(e.target.value) || 0) }))}
-                  placeholder="e.g. 4.5"
-                  className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-green-500"
+                  min="0"
+                  max="24"
+                  step="0.5"
+                  value={hours}
+                  onChange={(e) => setHours(Number(e.target.value))}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-white font-mono text-sm focus:outline-none focus:border-emerald-500"
                 />
-              </div>
-              <div>
-                <label className="text-xs font-mono text-gray-500 mb-1 block">Labs Completed</label>
-                <input
-                  type="number"
-                  min={0}
-                  step={1}
-                  value={local.labs || ''}
-                  onChange={(e) => setLocal((p) => ({ ...p, labs: Math.max(0, parseInt(e.target.value) || 0) }))}
-                  placeholder="e.g. 3"
-                  className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-green-500"
-                />
+                <button
+                  onClick={() => setHours(5)}
+                  className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-xl text-xs font-mono font-bold border border-slate-700 whitespace-nowrap transition-colors"
+                >
+                  +5h Full
+                </button>
               </div>
             </div>
 
-            <ConfidenceSlider
-              value={local.confidence}
-              onChange={(v) => setLocal((p) => ({ ...p, confidence: v }))}
-            />
+            <div className="space-y-2">
+              <label className="font-mono text-xs font-medium text-slate-300 flex items-center gap-1.5">
+                <Terminal size={14} className="text-cyan-400" />
+                <span>Labs Completed</span>
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="10"
+                value={labs}
+                onChange={(e) => setLabs(Number(e.target.value))}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-white font-mono text-sm focus:outline-none focus:border-cyan-500"
+              />
+            </div>
           </div>
 
-          {/* Notes */}
-          <div>
-            <label className="text-xs font-mono text-gray-500 uppercase tracking-wider mb-2 block">Notes & Findings</label>
+          {/* Confidence Slider */}
+          <div className="pt-2">
+            <ConfidenceSlider value={confidence} onChange={setConfidence} />
+          </div>
+
+          {/* Notes Input */}
+          <div className="space-y-2 pt-2">
+            <label className="font-mono text-xs font-medium text-slate-300 flex items-center justify-between">
+              <span>Personal Notes & Key Commands</span>
+              <span className="text-[10px] text-slate-500">Markdown supported</span>
+            </label>
             <textarea
-              rows={5}
-              value={local.notes}
-              onChange={(e) => setLocal((p) => ({ ...p, notes: e.target.value }))}
-              placeholder="Document what you learned, commands used, interesting findings, questions for later..."
-              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white text-sm font-mono focus:outline-none focus:border-green-500 resize-none"
+              rows={3}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Record commands used (e.g., nmap -sC -sV, burp intruder tricks, credentials found, pain points)..."
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-white font-mono text-xs focus:outline-none focus:border-emerald-500 resize-none leading-relaxed"
             />
           </div>
 
-          {/* Validation warning */}
-          {attemptedComplete && !canComplete && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 flex gap-2">
-              <AlertTriangle size={16} className="text-red-400 shrink-0 mt-0.5" />
-              <div>
-                <div className="text-xs font-mono text-red-400 font-bold mb-1">Cannot mark complete — missing:</div>
-                <ul className="text-xs text-red-300 font-mono space-y-0.5">
-                  {missingItems.map((item) => <li key={item}>• {item}</li>)}
-                </ul>
-              </div>
+          {error && (
+            <div className="p-3 rounded-xl bg-red-950/30 border border-red-500/40 text-red-300 font-mono text-xs flex items-center gap-2">
+              <AlertTriangle size={15} className="shrink-0 text-red-400" />
+              <span>{error}</span>
             </div>
           )}
+        </div>
 
-          {/* Action buttons */}
-          <div className="flex flex-col gap-2 pb-2">
-            {!progress.completed ? (
-              <button
-                onClick={handleComplete}
-                className="w-full py-3 bg-green-500 hover:bg-green-600 text-black font-mono font-bold text-sm rounded transition-colors"
-              >
-                ✓ COMPLETE DAY {def.day}
-              </button>
-            ) : (
-              <button
-                onClick={handleComplete}
-                className="w-full py-3 bg-green-500/20 hover:bg-green-500/30 border border-green-500/40 text-green-400 font-mono font-bold text-sm rounded transition-colors"
-              >
-                ✓ UPDATE & KEEP COMPLETE
-              </button>
-            )}
+        {/* Modal Actions */}
+        <div className="p-4 border-t border-slate-800/80 bg-slate-900/80 flex flex-wrap items-center justify-between gap-2">
+          {progress?.completed ? (
+            <button
+              onClick={handleMarkIncomplete}
+              className="text-xs font-mono text-red-400 hover:text-red-300 transition-colors px-2 py-1"
+            >
+              Mark Incomplete
+            </button>
+          ) : (
+            <span className="text-[11px] font-mono text-slate-500">
+              Auto-saves to browser storage
+            </span>
+          )}
 
+          <div className="flex items-center gap-2 ml-auto">
             <button
               onClick={handleSaveDraft}
-              className="w-full py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 font-mono text-sm rounded transition-colors"
+              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono font-medium transition-colors border border-slate-700"
             >
-              Save Draft (keep incomplete)
+              Save Draft
             </button>
-
-            {progress.completed && (
-              <button
-                onClick={handleMarkIncomplete}
-                className="w-full py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 font-mono text-sm rounded transition-colors"
-              >
-                Mark as Incomplete
-              </button>
-            )}
+            <button
+              onClick={handleComplete}
+              className="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-mono font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-500/20 transition-all hover:scale-105 active:scale-95"
+            >
+              <Sparkles size={14} />
+              <span>{progress?.completed ? 'Update Completed Day' : 'Mark Day Complete'}</span>
+            </button>
           </div>
         </div>
       </div>

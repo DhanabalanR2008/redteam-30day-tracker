@@ -3,103 +3,199 @@ import { DAYS, WEEKS } from '../data/days';
 import type { DayProgress } from '../types';
 import { DayModal } from '../components/DayModal';
 import { ProgressBar } from '../components/ProgressBar';
-import { Flag } from 'lucide-react';
+import {
+  Flag, ChevronDown, ChevronUp, CheckCircle2,
+  Clock, ArrowRight, Award
+} from 'lucide-react';
 
 interface PlanProps {
   progress: DayProgress[];
-  onUpdateDay: (p: DayProgress) => void;
+  onUpdateDay: (dayNumber: number, data: Partial<DayProgress>) => void;
 }
 
-export const Plan: React.FC<PlanProps> = ({ progress, onUpdateDay }) => {
-  const [selectedDay, setSelectedDay] = useState<number | null>(null);
-  const currentDayDef = DAYS.find((d) => !progress.find((p) => p.day === d.day)?.completed);
+const WEEK_CHECKPOINTS: Record<number, string> = {
+  1: 'IP → Port → Service → Protocol → Application (End-to-End Enumeration Flow)',
+  2: 'Request → Application → Input → Backend → Database/Logic → Response Flow',
+  3: 'Vulnerability Matrix: SQLi • XSS • IDOR • SSRF • File Upload • Command Injection',
+  4: 'Enterprise Domain Kill Chain: Recon → Initial Foothold → PrivEsc → Lateral Movement → Domain Admin',
+};
 
-  const selectedDef = selectedDay !== null ? DAYS.find((d) => d.day === selectedDay) : null;
-  const selectedProgress = selectedDay !== null ? progress.find((p) => p.day === selectedDay)! : null;
+export const Plan: React.FC<PlanProps> = ({ progress, onUpdateDay }) => {
+  const [selectedDayNumber, setSelectedDayNumber] = useState<number | null>(null);
+  const [expandedWeeks, setExpandedWeeks] = useState<Record<number, boolean>>({
+    1: true,
+    2: true,
+    3: true,
+    4: true,
+  });
+
+  const toggleWeek = (w: number) => {
+    setExpandedWeeks((prev) => ({ ...prev, [w]: !prev[w] }));
+  };
+
+  const selectedDay = DAYS.find((d) => d.day === selectedDayNumber) || null;
+  const selectedProgress = progress.find((p) => p.day === selectedDayNumber);
 
   return (
-    <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-xl font-bold font-mono text-white">30-Day Plan</h1>
-        <p className="text-gray-500 text-sm font-mono mt-1">Click any day to open details and log progress.</p>
+    <div className="space-y-6 pb-12">
+      {/* Header */}
+      <div className="glass-panel p-5 rounded-2xl space-y-1">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-xs text-emerald-400 font-bold uppercase tracking-widest bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
+            ROADMAP BLUEPRINT
+          </span>
+        </div>
+        <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">
+          30-Day Red Team Curriculum
+        </h1>
+        <p className="text-xs font-mono text-slate-400">
+          Structured 4-week progression from fundamental Linux networking to Active Directory enterprise exploitation.
+        </p>
       </div>
 
-      {WEEKS.map(({ week, name, days: totalDays }) => {
-        const weekDays = DAYS.filter((d) => d.week === week);
-        const completed = weekDays.filter((d) => progress.find((p) => p.day === d.day)?.completed).length;
-        const pct = Math.round((completed / totalDays) * 100);
+      {/* 4 Weeks Accordion List */}
+      <div className="space-y-4">
+        {WEEKS.map((w) => {
+          const weekDays = DAYS.filter((d) => d.week === w.week);
+          const weekCompleted = weekDays.filter((d) => {
+            const p = progress.find((item) => item.day === d.day);
+            return p?.completed;
+          }).length;
+          const weekHours = weekDays.reduce((acc, d) => {
+            const p = progress.find((item) => item.day === d.day);
+            return acc + (p?.hours || 0);
+          }, 0);
+          const pct = Math.round((weekCompleted / weekDays.length) * 100);
+          const isExpanded = expandedWeeks[w.week];
+          const checkpointText = WEEK_CHECKPOINTS[w.week];
 
-        return (
-          <div key={week}>
-            {/* Week header */}
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Flag size={14} className="text-green-400" />
-                <div>
-                  <span className="text-xs font-mono text-green-400 uppercase tracking-widest">WEEK {week}</span>
-                  <div className="text-white font-semibold text-sm">{name}</div>
+          return (
+            <div key={w.week} className="glass-panel rounded-2xl overflow-hidden border border-slate-800/80 transition-all">
+              {/* Week Header */}
+              <div
+                onClick={() => toggleWeek(w.week)}
+                className="p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer hover:bg-slate-900/60 transition-colors"
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                      WEEK {w.week}
+                    </span>
+                    <span className="text-xs text-slate-400 font-mono">• {w.days} Days Curriculum</span>
+                  </div>
+                  <h3 className="text-lg font-bold text-white tracking-tight">{w.name}</h3>
+                </div>
+
+                <div className="flex items-center justify-between md:justify-end gap-4 w-full md:w-auto">
+                  <div className="w-36 md:w-44 space-y-1">
+                    <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                      <span>{weekCompleted}/{weekDays.length} Days</span>
+                      <span>{weekHours}h</span>
+                    </div>
+                    <ProgressBar value={pct} height="sm" showPercentage={false} />
+                  </div>
+
+                  <button className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition-colors">
+                    {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                  </button>
                 </div>
               </div>
-              <div className="text-right">
-                <div className="text-xs font-mono text-gray-400">{completed} / {totalDays} days</div>
-                <div className="text-xs font-mono text-gray-600">{pct}%</div>
-              </div>
-            </div>
 
-            <ProgressBar value={completed} max={totalDays} color={pct === 100 ? 'green' : 'orange'} height="sm" />
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
-              {weekDays.map((def) => {
-                const prog = progress.find((p) => p.day === def.day)!;
-                return (
-                  <div key={def.day} className="flex flex-col">
-                    {/* Expanded card for Plan page */}
-                    <button
-                      onClick={() => setSelectedDay(def.day)}
-                      className={`text-left rounded-lg border p-4 transition-all hover:scale-[1.01] flex flex-col gap-2 ${
-                        prog.completed
-                          ? 'bg-green-500/5 border-green-500/30 hover:border-green-500/50'
-                          : currentDayDef?.day === def.day
-                          ? 'bg-orange-500/5 border-orange-500/40 hover:border-orange-500/60'
-                          : 'bg-gray-900 border-gray-800 hover:border-gray-700'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-mono text-gray-500">DAY {def.day}</span>
-                        {prog.completed && <span className="text-xs font-mono text-green-400">✓ DONE</span>}
-                        {!prog.completed && currentDayDef?.day === def.day && (
-                          <span className="text-xs font-mono text-orange-400">→ CURRENT</span>
-                        )}
-                        {def.isCheckpoint && <span className="text-xs font-mono text-blue-400">🏁 TEST</span>}
+              {/* Week Content */}
+              {isExpanded && (
+                <div className="p-4 md:p-5 pt-0 border-t border-slate-800/60 space-y-4 bg-slate-950/40">
+                  {/* Checkpoint highlight */}
+                  {checkpointText && (
+                    <div className="p-3.5 rounded-xl bg-slate-900/80 border border-emerald-500/30 font-mono text-xs space-y-1.5 mt-3">
+                      <div className="text-emerald-400 font-bold flex items-center gap-1.5">
+                        <Award size={14} />
+                        <span>Week {w.week} Core Checkpoint:</span>
                       </div>
-                      <div className="text-sm text-white font-medium leading-snug">{def.topic}</div>
-                      <div className="text-xs text-gray-500 leading-relaxed line-clamp-2">{def.study}</div>
-                      {prog.completed && (
-                        <div className="flex gap-3 text-xs font-mono text-gray-600 mt-1 border-t border-gray-800 pt-2">
-                          {prog.hours > 0 && <span>{prog.hours}h studied</span>}
-                          {prog.labs > 0 && <span>{prog.labs} labs</span>}
-                          <span className={prog.confidence >= 7 ? 'text-green-500' : prog.confidence >= 4 ? 'text-orange-500' : 'text-red-500'}>
-                            ★ {prog.confidence}/10
-                          </span>
-                        </div>
-                      )}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
+                      <div className="p-2 rounded-lg bg-slate-950 text-emerald-300 border border-slate-800 text-[11px] tracking-wide overflow-x-auto">
+                        {checkpointText}
+                      </div>
+                    </div>
+                  )}
 
-      {selectedDay !== null && selectedDef && selectedProgress && (
-        <DayModal
-          def={selectedDef}
-          progress={selectedProgress}
-          onClose={() => setSelectedDay(null)}
-          onSave={(updated) => { onUpdateDay(updated); setSelectedDay(null); }}
-        />
-      )}
+                  {/* Day Row Items */}
+                  <div className="space-y-2">
+                    {weekDays.map((d) => {
+                      const p = progress.find((item) => item.day === d.day);
+                      const isCompleted = p?.completed;
+
+                      return (
+                        <div
+                          key={d.day}
+                          onClick={() => setSelectedDayNumber(d.day)}
+                          className={`flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-xl border cursor-pointer transition-all gap-2 ${
+                            isCompleted
+                              ? 'bg-slate-900/60 border-emerald-500/30 hover:border-emerald-500/50'
+                              : 'bg-slate-900/30 border-slate-800 hover:border-slate-700 hover:bg-slate-900/60'
+                          }`}
+                        >
+                          <div className="flex items-start sm:items-center gap-3">
+                            <div
+                              className={`w-7 h-7 rounded-lg flex items-center justify-center font-mono text-xs font-bold shrink-0 ${
+                                isCompleted
+                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                                  : 'bg-slate-800 text-slate-400'
+                              }`}
+                            >
+                              {d.day}
+                            </div>
+
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-white text-xs md:text-sm">
+                                  {d.topic}
+                                </span>
+                                {d.isCheckpoint && (
+                                  <span className="px-1.5 py-0.2 text-[9px] font-mono font-bold rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-0.5">
+                                    <Flag size={9} /> TEST
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] font-mono text-slate-400 line-clamp-1">
+                                {d.practical}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/60">
+                            <div className="flex items-center gap-2 font-mono text-xs text-slate-400">
+                              <Clock size={12} className={isCompleted ? 'text-emerald-400' : 'text-slate-500'} />
+                              <span>{p?.hours || 0}h</span>
+                            </div>
+
+                            {isCompleted ? (
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[11px] font-mono flex items-center gap-1 font-semibold">
+                                <CheckCircle2 size={12} /> Done
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 text-[11px] font-mono flex items-center gap-1">
+                                View <ArrowRight size={11} />
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Day Modal */}
+      <DayModal
+        day={selectedDay}
+        progress={selectedProgress}
+        isOpen={selectedDayNumber !== null}
+        onClose={() => setSelectedDayNumber(null)}
+        onSave={onUpdateDay}
+      />
     </div>
   );
 };

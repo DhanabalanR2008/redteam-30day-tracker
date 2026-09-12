@@ -4,46 +4,41 @@ interface ProgressBarProps {
   value: number;
   max?: number;
   label?: string;
-  color?: 'green' | 'orange' | 'red' | 'blue';
-  showPercent?: boolean;
+  showPercentage?: boolean;
+  color?: string;
   height?: 'sm' | 'md' | 'lg';
 }
-
-const colorMap = {
-  green: 'bg-green-500',
-  orange: 'bg-orange-500',
-  red: 'bg-red-500',
-  blue: 'bg-blue-500',
-};
-
-const heightMap = {
-  sm: 'h-1',
-  md: 'h-2',
-  lg: 'h-3',
-};
 
 export const ProgressBar: React.FC<ProgressBarProps> = ({
   value,
   max = 100,
   label,
-  color = 'green',
-  showPercent = false,
+  showPercentage = true,
+  color = 'bg-gradient-to-r from-emerald-500 to-teal-400',
   height = 'md',
 }) => {
-  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
+  const percentage = Math.min(100, Math.max(0, Math.round((value / max) * 100)));
+
+  const heightClasses = {
+    sm: 'h-1.5',
+    md: 'h-2.5',
+    lg: 'h-4',
+  };
 
   return (
-    <div className="w-full">
-      {(label || showPercent) && (
-        <div className="flex justify-between items-center mb-1">
-          {label && <span className="text-xs text-gray-400 font-mono">{label}</span>}
-          {showPercent && <span className="text-xs text-gray-400 font-mono">{pct}%</span>}
+    <div className="w-full space-y-1.5">
+      {(label || showPercentage) && (
+        <div className="flex justify-between items-center text-xs font-mono">
+          {label && <span className="text-slate-300 font-medium">{label}</span>}
+          {showPercentage && (
+            <span className="text-emerald-400 font-bold ml-auto">{percentage}%</span>
+          )}
         </div>
       )}
-      <div className={`w-full bg-gray-800 rounded-full ${heightMap[height]}`}>
+      <div className={`w-full bg-slate-900/90 rounded-full overflow-hidden border border-slate-800 p-0.5 ${heightClasses[height]}`}>
         <div
-          className={`${colorMap[color]} ${heightMap[height]} rounded-full transition-all duration-500`}
-          style={{ width: `${pct}%` }}
+          className={`${heightClasses[height]} rounded-full transition-all duration-500 ease-out shadow-sm ${color}`}
+          style={{ width: `${percentage}%` }}
         />
       </div>
     </div>
